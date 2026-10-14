@@ -1,5 +1,4 @@
-// Copy this file to include/secrets.h and fill in your Wi-Fi credentials.
-// include/secrets.h is listed in .gitignore so it never ends up in git.
+// Template for include/secrets.h (Wi-Fi credentials).
 #pragma once
 
 #define WIFI_SSID     "your-wifi-ssid"

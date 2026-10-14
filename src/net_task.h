@@ -14,3 +14,7 @@ bool netPollMessage(NetMsg& out);
 
 // Reads the saved province from NVS (DEFAULT_PROVINCE if missing/invalid).
 uint8_t netLoadSavedProvince();
+
+// Serialises HTTPS sessions between the prayer-times fetch and the apps' HTTP worker.
+void netHttpLock();
+void netHttpUnlock();

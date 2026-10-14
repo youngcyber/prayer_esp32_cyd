@@ -3,12 +3,14 @@
 // Threading model:
 //   loop()  (core 1) : the only place that touches LVGL (timers, events, widget updates)
 //   netTask (core 0) : Wi-Fi, NTP, HTTPS to AlAdhan, NVS cache - never touches LVGL
-//   They talk only through two FreeRTOS queues (see net_task.cpp).
+//   apphttp (core 0) : HTTP requests made by the mini-apps (see src/apps/app_http.cpp)
+//   They talk only through FreeRTOS queues (see net_task.cpp, app_http.cpp).
 
 #include <Arduino.h>
 #include <Preferences.h>
 #include <lvgl.h>
 
+#include "apps/app.h"
 #include "display.h"
 #include "fonts/fonts.h"
 #include "net_task.h"
@@ -137,10 +139,12 @@ void setup() {
   // Start the network task first so the initial request from uiCreate() has a queue to land in.
   netTaskStart();
   uiCreate(netLoadSavedProvince());
+  appsInit(lv_scr_act());
 }
 
 void loop() {
   uiProcessNetMessages();
+  appsPoll();
   lv_timer_handler();
   delay(5);
 }

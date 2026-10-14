@@ -27,6 +27,7 @@ static constexpr uint32_t MAINTENANCE_PERIOD_MS = 30000;
 
 static QueueHandle_t s_reqQueue;  // length 1, overwritten -> latest selection wins
 static QueueHandle_t s_msgQueue;
+static SemaphoreHandle_t s_httpMutex;
 
 // ---- network-task-only state ----
 static uint8_t s_currentProvince = DEFAULT_PROVINCE;
@@ -257,7 +258,9 @@ static void doFetch(uint8_t province, uint32_t seq) {
 
   bool ok = false;
   if (ensureWifi()) {
+    netHttpLock();
     ok = fetchFromApi(province, res.data, res.error, sizeof(res.error));
+    netHttpUnlock();
   } else {
     snprintf(res.error, sizeof(res.error), "Wi-Fi not connected");
   }
@@ -311,6 +314,7 @@ static void netTask(void*) {
 void netTaskStart() {
   s_reqQueue = xQueueCreate(1, sizeof(FetchRequest));
   s_msgQueue = xQueueCreate(6, sizeof(NetMsg));
+  s_httpMutex = xSemaphoreCreateMutex();
   // Core 0 alongside the Wi-Fi stack; LVGL runs in loop() on core 1.
   xTaskCreatePinnedToCore(netTask, "net", 12288, nullptr, 1, nullptr, 0);
 }
@@ -321,3 +325,7 @@ void netRequestFetch(uint8_t province, uint32_t seq) {
 }
 
 bool netPollMessage(NetMsg& out) { return xQueueReceive(s_msgQueue, &out, 0) == pdTRUE; }
+
+void netHttpLock() { xSemaphoreTake(s_httpMutex, portMAX_DELAY); }
+
+void netHttpUnlock() { xSemaphoreGive(s_httpMutex); }

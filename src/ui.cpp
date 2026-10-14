@@ -6,20 +6,8 @@
 #include "app_types.h"
 #include "fonts/fonts.h"
 #include "net_task.h"
-
-// ---- Islamic Modern palette: emerald + gold ----
-#define COL_BG          lv_color_hex(0x062A22)
-#define COL_BAR         lv_color_hex(0x04211A)
-#define COL_CARD        lv_color_hex(0x0B3D30)
-#define COL_CARD_HI     lv_color_hex(0x135A45)
-#define COL_EMERALD     lv_color_hex(0x1E8C6E)
-#define COL_GOLD        lv_color_hex(0xD4AF37)
-#define COL_GOLD_LIGHT  lv_color_hex(0xF2D27A)
-#define COL_TEXT        lv_color_hex(0xEFF7F2)
-#define COL_MUTED       lv_color_hex(0x9FC3B5)
-#define COL_OK          lv_color_hex(0x5EE0A8)
-#define COL_WARN        lv_color_hex(0xF5A524)
-#define COL_ERR         lv_color_hex(0xE5484D)
+#include "theme.h"
+#include "apps/app.h"
 
 static const char* const HIJRI_MONTHS[12] = {
     "มุฮัรรอม", "ศอฟัร", "รอบีอุลเอาวัล", "รอบีอุลอาคิร", "ญุมาดัลอูลา", "ญุมาดัลอาคิเราะฮ์",
@@ -309,6 +297,19 @@ static void createTopBar(lv_obj_t* scr) {
   lv_obj_set_style_text_color(list, COL_BAR, LV_PART_SELECTED | LV_STATE_CHECKED);
   lv_obj_set_style_bg_color(list, COL_EMERALD, LV_PART_SELECTED | LV_STATE_PRESSED);
   lv_obj_set_style_text_color(list, COL_TEXT, LV_PART_SELECTED | LV_STATE_PRESSED);
+
+  // Opens the mini-apps menu (src/apps)
+  lv_obj_t* apps = lv_btn_create(bar);
+  lv_obj_set_size(apps, 38, 32);
+  lv_obj_set_pos(apps, 150, 4);
+  lv_obj_set_style_bg_color(apps, COL_CARD, 0);
+  lv_obj_set_style_bg_color(apps, COL_CARD_HI, LV_STATE_PRESSED);
+  lv_obj_set_style_border_color(apps, COL_GOLD, 0);
+  lv_obj_set_style_border_width(apps, 1, 0);
+  lv_obj_set_style_radius(apps, 8, 0);
+  lv_obj_set_ext_click_area(apps, 4);
+  lv_obj_add_event_cb(apps, [](lv_event_t*) { appsOpenMenu(); }, LV_EVENT_CLICKED, nullptr);
+  lv_obj_center(makeLabel(apps, &lv_font_montserrat_16, COL_GOLD, LV_SYMBOL_LIST));
 
   s_wifi = makeLabel(bar, &lv_font_montserrat_16, COL_MUTED, LV_SYMBOL_WIFI);
   lv_obj_align(s_wifi, LV_ALIGN_RIGHT_MID, -8, 0);
