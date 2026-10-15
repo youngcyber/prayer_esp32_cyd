@@ -8,26 +8,34 @@
 #include <sys/time.h>
 #include <time.h>
 
+// secrets.h only supplies the default network; the one chosen on the Wi-Fi settings screen
+// is stored in NVS and takes priority.
 #if __has_include("secrets.h")
 #include "secrets.h"
-#else
-#error "Missing include/secrets.h - copy include/secrets.example.h to include/secrets.h and set your Wi-Fi credentials"
+#endif
+#ifndef WIFI_SSID
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
 #endif
 
 // AlAdhan calculation method: 3 = Muslim World League, 17 = JAKIM (Malaysia).
 static constexpr int ALADHAN_METHOD = 3;
 static constexpr const char* TZ_INFO = "ICT-7";  // Asia/Bangkok, no DST
 static constexpr const char* NVS_NAMESPACE = "prayer";
+static constexpr const char* WIFI_NAMESPACE = "wifi";
 
 static constexpr uint32_t WIFI_TIMEOUT_MS = 15000;
 static constexpr uint32_t NTP_TIMEOUT_MS = 15000;
 static constexpr uint32_t HTTP_TIMEOUT_MS = 10000;
 static constexpr uint32_t RETRY_INTERVAL_MS = 60000;
 static constexpr uint32_t MAINTENANCE_PERIOD_MS = 30000;
+static constexpr uint32_t POLL_MS = 500;  // how quickly a Wi-Fi change request is noticed
 
 static QueueHandle_t s_reqQueue;  // length 1, overwritten -> latest selection wins
 static QueueHandle_t s_msgQueue;
 static SemaphoreHandle_t s_httpMutex;
+static volatile bool s_reconnectRequested = false;  // set by netSetWifi() from the UI
+static volatile bool s_reconnecting = false;
 
 // ---- network-task-only state ----
 static uint8_t s_currentProvince = DEFAULT_PROVINCE;
@@ -57,6 +65,36 @@ static void saveProvince(uint8_t province) {
   if (prefs.getUChar("prov", 0xFF) != province) prefs.putUChar("prov", province);
   prefs.end();
 }
+
+// Wi-Fi credentials: NVS first, secrets.h as the fallback.
+static void loadWifi(char* ssid, size_t ssidLen, char* pass, size_t passLen) {
+  Preferences prefs;
+  bool have = prefs.begin(WIFI_NAMESPACE, false) && prefs.isKey("ssid");  // rw: creates the namespace, no error log
+  if (have) {
+    prefs.getString("ssid", ssid, ssidLen);
+    prefs.getString("pass", pass, passLen);
+  } else {
+    strlcpy(ssid, WIFI_SSID, ssidLen);
+    strlcpy(pass, WIFI_PASSWORD, passLen);
+  }
+  prefs.end();
+}
+
+void netGetWifiSsid(char* out, size_t len) {
+  char pass[65];
+  loadWifi(out, len, pass, sizeof(pass));
+}
+
+void netSetWifi(const char* ssid, const char* pass) {
+  Preferences prefs;
+  prefs.begin(WIFI_NAMESPACE, false);
+  prefs.putString("ssid", ssid);
+  prefs.putString("pass", pass);
+  prefs.end();
+  s_reconnectRequested = true;
+}
+
+bool netWifiBusy() { return s_reconnectRequested || s_reconnecting; }
 
 static void cacheKey(uint8_t province, char* key) { snprintf(key, 8, "c%u", province); }
 
@@ -106,9 +144,15 @@ static bool ensureWifi() {
     postWifiStatus(true);
     return true;
   }
+  char ssid[33], pass[65];
+  loadWifi(ssid, sizeof(ssid), pass, sizeof(pass));
   WiFi.mode(WIFI_STA);
+  if (!ssid[0]) {  // nothing configured yet: set it up on the Wi-Fi settings screen
+    postWifiStatus(false);
+    return false;
+  }
   WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(ssid, pass);
   uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
     vTaskDelay(pdMS_TO_TICKS(250));
@@ -282,10 +326,22 @@ static void doFetch(uint8_t province, uint32_t seq) {
   postMsg(res);  // the UI ignores it if a newer selection was made meanwhile
 }
 
+// Drops the current connection and joins the network saved by netSetWifi().
+static void reconnectWifi() {
+  Serial.println("[net] Wi-Fi settings changed, reconnecting");
+  WiFi.disconnect();
+  // Wait for the old link to drop, otherwise ensureWifi() would report it as connected.
+  for (int i = 0; i < 20 && WiFi.status() == WL_CONNECTED; i++) vTaskDelay(pdMS_TO_TICKS(100));
+  bool ok = ensureWifi();
+  s_reconnecting = false;
+  if (ok && !s_lastFetchOk) doFetch(s_currentProvince, s_currentSeq);
+}
+
 static void netTask(void*) {
+  uint32_t lastMaintenance = millis();
   for (;;) {
     FetchRequest req;
-    if (xQueueReceive(s_reqQueue, &req, pdMS_TO_TICKS(MAINTENANCE_PERIOD_MS)) == pdTRUE) {
+    if (xQueueReceive(s_reqQueue, &req, pdMS_TO_TICKS(POLL_MS)) == pdTRUE) {
       if (req.province >= PROVINCE_COUNT) continue;
       struct tm t;
       bool sameAsLoaded = req.province == s_currentProvince && s_lastFetchOk &&
@@ -301,6 +357,15 @@ static void netTask(void*) {
       doFetch(req.province, req.seq);
       continue;
     }
+
+    if (s_reconnectRequested) {
+      s_reconnecting = true;  // set before clearing the request so netWifiBusy() never blinks false
+      s_reconnectRequested = false;
+      reconnectWifi();
+      continue;
+    }
+    if (millis() - lastMaintenance < MAINTENANCE_PERIOD_MS) continue;
+    lastMaintenance = millis();
 
     // Periodic maintenance: Wi-Fi state, daily refresh after midnight, retry after failure.
     postWifiStatus(WiFi.status() == WL_CONNECTED);

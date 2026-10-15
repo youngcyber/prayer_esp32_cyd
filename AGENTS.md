@@ -16,7 +16,7 @@ API ทั้งหมดที่แอปใช้ได้อยู่ใน 
 
 ## ไฟล์ที่ห้ามแก้ (ยกเว้นผู้ใช้สั่งชัดเจน)
 
-`src/main.cpp`, `src/display.h`, `src/net_task.*`, `src/ui.*`, `src/app_types.h`, `src/theme.h`, `src/apps/app.h`, `src/apps/app_manager.cpp`, `src/apps/app_http.cpp`, `include/lv_conf.h`, `platformio.ini`, `include/secrets.h`, ไฟล์ของแอปกลุ่มอื่น
+`src/main.cpp`, `src/display.h`, `src/net_task.*`, `src/ui.*`, `src/app_types.h`, `src/theme.h`, `src/apps/app.h`, `src/apps/app_manager.cpp`, `src/apps/app_http.cpp`, `src/apps/app_wifi.cpp`, `include/lv_conf.h`, `platformio.ini`, `include/secrets.h`, ไฟล์ของแอปกลุ่มอื่น
 
 แอปหนึ่งตัวควรอยู่ในไฟล์ `.cpp` ไฟล์เดียว และแก้ `apps.cpp` แค่บรรทัดที่ลงทะเบียนแอป
 
@@ -25,7 +25,7 @@ API ทั้งหมดที่แอปใช้ได้อยู่ใน 
 **Thread / การบล็อก**
 - เรียกฟังก์ชัน LVGL (`lv_*`) ได้เฉพาะใน `create()`, event callback, callback ของ `appTimerCreate()` และ callback ของ `appHttpGet()` เท่านั้น
 - ห้ามสร้าง FreeRTOS task, ห้ามใช้ `HTTPClient` / `WiFiClient` เอง ให้ใช้ `appHttpGet(url, callback)` เท่านั้น
-- ห้ามใช้ `delay()`, ห้ามวนลูปรอ, ห้ามเรียก `WiFi.begin()` (เชื่อมต่อ Wi-Fi ให้อัตโนมัติแล้ว)
+- ห้ามใช้ `delay()`, ห้ามวนลูปรอ, ห้ามเรียก `WiFi.begin()` (เชื่อมต่อ Wi-Fi ให้อัตโนมัติแล้ว เปลี่ยนเครือข่ายได้ที่แอป "ตั้งค่า Wi-Fi")
 - งานที่ต้องทำซ้ำให้ใช้ `appTimerCreate()` ห้ามใช้ `lv_timer_create()` ตรงๆ (timer จะถูกลบอัตโนมัติเมื่อออกจากแอป)
 
 **หน่วยความจำ** (บอร์ดไม่มี PSRAM, RAM เหลือใช้ไม่มาก)
@@ -33,7 +33,7 @@ API ทั้งหมดที่แอปใช้ได้อยู่ใน 
 - ประกาศ `JsonDocument` เป็นตัวแปร local ใน callback เท่านั้น ห้ามเป็น global
 - ห้ามสร้าง array ขนาดใหญ่ ห้ามใช้รูปภาพ bitmap ให้ใช้ LV_SYMBOL_*, รูปทรง, `lv_bar`, `lv_arc`, `lv_chart` แทน
 - อย่าเรียก API ถี่กว่าทุก 5 นาที
-- ถ้าต้องบันทึกค่าไว้หลังปิดเครื่อง ใช้ `Preferences` (NVS) โดยตั้ง namespace ของแอปเอง เช่น `"tasbih"` ห้ามใช้ `"prayer"` หรือ `"touch"` และอย่าเขียนถี่ (เขียนเมื่อค่าเปลี่ยนเท่านั้น)
+- ถ้าต้องบันทึกค่าไว้หลังปิดเครื่อง ใช้ `Preferences` (NVS) โดยตั้ง namespace ของแอปเอง เช่น `"tasbih"` ห้ามใช้ `"prayer"`, `"touch"` หรือ `"wifi"` และอย่าเขียนถี่ (เขียนเมื่อค่าเปลี่ยนเท่านั้น)
 
 **ฟอนต์**
 - ข้อความภาษาไทยต้องใช้ `&prompt_14`, `&prompt_16`, `&prompt_20` เท่านั้น (มีอักษรไทย, ASCII, `°` และ LV_SYMBOL_* ในตัว)

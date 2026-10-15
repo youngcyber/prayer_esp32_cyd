@@ -6,9 +6,11 @@
 
 #include "app.h"
 
+extern AppDef APP_WIFI;  // built-in settings screen, keep it first
 extern AppDef APP_SUN;
 
 const AppDef* const APPS[] = {
+    &APP_WIFI,
     &APP_SUN,
 };
 
